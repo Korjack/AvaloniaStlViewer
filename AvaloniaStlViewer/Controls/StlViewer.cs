@@ -1,3 +1,4 @@
+using Avalonia.Input;
 using AvaloniaStlViewer.OpenTK;
 using AvaloniaStlViewer.STL;
 using OpenTK.Graphics.OpenGL4;
@@ -14,11 +15,63 @@ public class StlViewer : BaseTkOpenGlControl
     private Shader.Shader _shader;
     private StlMesh _mesh;
 
+    private readonly Matrix4 _baseModel = Matrix4.Identity * Matrix4.CreateScale(0.1f);
+    private Matrix4 _model;
     private Matrix4 _view;
     private Matrix4 _projection;
 
     private readonly string _vertPath = "Shader/stl.vert";
     private readonly string _fragPath = "Shader/stl.frag";
+
+    private bool _mouseLeftDown;
+    private Vector2 _lastMousePos;
+    private float _rotationX;
+    private float _rotationY;
+
+    public StlViewer()
+    {
+        PointerPressed += OnPointerPressed;
+        PointerReleased += OnPointerReleased;
+        PointerMoved += OnPointerMoved;
+    }
+
+    private void OnPointerPressed(object? sender, PointerEventArgs e)
+    {
+        var props = e.GetCurrentPoint(this);
+        if (props.Properties.IsLeftButtonPressed)
+        {
+            _mouseLeftDown = true;
+            _lastMousePos = new Vector2((float)props.Position.Y, (float)props.Position.X);
+        }
+    }
+
+    private void OnPointerReleased(object? sender, PointerEventArgs e)
+    {
+        var props = e.GetCurrentPoint(this);
+        if (props.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonReleased)
+        {
+            _mouseLeftDown = false;
+        }
+    }
+
+    private void OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if(!_mouseLeftDown) return;
+
+        var props = e.GetCurrentPoint(this);
+        var currentPos = new Vector2((float)props.Position.Y, (float)props.Position.X);
+        var delta = currentPos - _lastMousePos;
+
+        _rotationX += delta.X * 0.5f;
+        _rotationY += delta.Y * 0.5f;
+
+        // 모델 매트릭스 업데이트 (스케일 유지하면서 회전)
+        var rotation = Matrix4.CreateRotationY(MathHelper.DegreesToRadians(_rotationY)) *
+                       Matrix4.CreateRotationX(MathHelper.DegreesToRadians(_rotationX));
+        _model = _baseModel * rotation;
+
+        _lastMousePos = currentPos;
+    }
     
     protected override void OnLoad()
     {
@@ -74,6 +127,7 @@ public class StlViewer : BaseTkOpenGlControl
         _shader.Use();
 
         // 기본 뷰 및 프로젝션 매트릭스 설정
+        _model = Matrix4.Identity * Matrix4.CreateScale(0.1f);
         _view = Matrix4.CreateTranslation(0.0f, 0.0f, -10.0f);
         _projection = Matrix4.CreatePerspectiveFieldOfView(
             MathHelper.DegreesToRadians(60f),
@@ -94,9 +148,7 @@ public class StlViewer : BaseTkOpenGlControl
 
         _shader.Use();
         
-        var model = Matrix4.Identity * Matrix4.CreateScale(0.1f);
-        
-        _shader.SetMatrix4("model", model);
+        _shader.SetMatrix4("model", _model);
         _shader.SetMatrix4("view", _view);
         _shader.SetMatrix4("projection", _projection);
         
